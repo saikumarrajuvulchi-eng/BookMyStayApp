@@ -3,11 +3,11 @@ import java.util.*;
 /**
  * BookMyStayApp
  *
- * Hotel Booking Management System - Use Case 7
- * Demonstrates Add-On Services with Booking System
+ * Hotel Booking Management System - Use Case 8
+ * Demonstrates Booking History & Reporting
  *
  * @author Lakshmi
- * @version 7.0
+ * @version 8.0
  */
 
 // ---------------- INVENTORY ----------------
@@ -34,10 +34,61 @@ class RoomInventory {
 class Reservation {
     String guestName;
     String roomType;
+    String reservationId;
 
     public Reservation(String guestName, String roomType) {
         this.guestName = guestName;
         this.roomType = roomType;
+    }
+
+    public void setReservationId(String id) {
+        this.reservationId = id;
+    }
+
+    public String toString() {
+        return "ID: " + reservationId + " | Guest: " + guestName + " | Room: " + roomType;
+    }
+}
+
+// ---------------- BOOKING HISTORY ----------------
+class BookingHistory {
+
+    private List<Reservation> history = new ArrayList<>();
+
+    public void addReservation(Reservation r) {
+        history.add(r); // preserves order
+    }
+
+    public List<Reservation> getAllReservations() {
+        return history; // read-only usage expected
+    }
+}
+
+// ---------------- REPORT SERVICE ----------------
+class BookingReportService {
+
+    public void displayAllBookings(List<Reservation> history) {
+        System.out.println("\n--- Booking History ---");
+
+        for (Reservation r : history) {
+            System.out.println(r);
+        }
+    }
+
+    public void generateSummary(List<Reservation> history) {
+
+        System.out.println("\n--- Booking Summary Report ---");
+
+        HashMap<String, Integer> countMap = new HashMap<>();
+
+        for (Reservation r : history) {
+            countMap.put(r.roomType,
+                    countMap.getOrDefault(r.roomType, 0) + 1);
+        }
+
+        for (Map.Entry<String, Integer> e : countMap.entrySet()) {
+            System.out.println(e.getKey() + " Booked: " + e.getValue());
+        }
     }
 }
 
@@ -61,90 +112,38 @@ class BookingRequestQueue {
 // ---------------- BOOKING SERVICE ----------------
 class BookingService {
 
-    private Set<String> allocatedRoomIds = new HashSet<>();
-    private HashMap<String, Set<String>> roomAllocations = new HashMap<>();
-    private List<String> confirmedReservationIds = new ArrayList<>();
-    private int idCounter = 1;
+    private Set<String> allocatedIds = new HashSet<>();
+    private int counter = 1;
 
-    public List<String> processBookings(BookingRequestQueue queue, RoomInventory inventory) {
+    public void processBookings(BookingRequestQueue queue,
+                                RoomInventory inventory,
+                                BookingHistory history) {
 
         while (!queue.isEmpty()) {
 
             Reservation r = queue.getNextRequest();
-            String type = r.roomType;
 
-            if (inventory.getAvailability(type) > 0) {
+            if (inventory.getAvailability(r.roomType) > 0) {
 
-                String roomId = type.replace(" ", "").toUpperCase() + "-" + idCounter++;
+                String id = r.roomType.replace(" ", "").toUpperCase() + "-" + counter++;
 
-                if (!allocatedRoomIds.contains(roomId)) {
+                if (!allocatedIds.contains(id)) {
 
-                    allocatedRoomIds.add(roomId);
+                    allocatedIds.add(id);
+                    inventory.decrement(r.roomType);
 
-                    roomAllocations.putIfAbsent(type, new HashSet<>());
-                    roomAllocations.get(type).add(roomId);
+                    r.setReservationId(id);
 
-                    inventory.decrement(type);
+                    // Add to history
+                    history.addReservation(r);
 
-                    confirmedReservationIds.add(roomId);
-
-                    System.out.println("Booking Confirmed → " + r.guestName + " | " + roomId);
+                    System.out.println("Confirmed: " + r);
                 }
 
             } else {
-                System.out.println("Booking Failed → " + r.guestName + " (" + type + ")");
+                System.out.println("Failed: " + r.guestName + " (" + r.roomType + ")");
             }
         }
-
-        return confirmedReservationIds;
-    }
-}
-
-// ---------------- ADD-ON SERVICE ----------------
-class AddOnService {
-    String serviceName;
-    double price;
-
-    public AddOnService(String serviceName, double price) {
-        this.serviceName = serviceName;
-        this.price = price;
-    }
-
-    public String toString() {
-        return serviceName + " (₹" + price + ")";
-    }
-}
-
-// ---------------- ADD-ON MANAGER ----------------
-class AddOnServiceManager {
-
-    private HashMap<String, List<AddOnService>> serviceMap = new HashMap<>();
-
-    // Add services to reservation
-    public void addService(String reservationId, AddOnService service) {
-        serviceMap.putIfAbsent(reservationId, new ArrayList<>());
-        serviceMap.get(reservationId).add(service);
-    }
-
-    // Display services
-    public void displayServices(String reservationId) {
-        System.out.println("\nServices for Reservation " + reservationId + ":");
-
-        List<AddOnService> services = serviceMap.get(reservationId);
-
-        if (services == null || services.isEmpty()) {
-            System.out.println("No services selected.");
-            return;
-        }
-
-        double total = 0;
-
-        for (AddOnService s : services) {
-            System.out.println("- " + s);
-            total += s.price;
-        }
-
-        System.out.println("Total Add-On Cost: ₹" + total);
     }
 }
 
@@ -153,32 +152,27 @@ public class BookMyStayApp {
 
     public static void main(String[] args) {
 
-        System.out.println("===== Book My Stay App v7.0 =====");
+        System.out.println("===== Book My Stay App v8.0 =====");
 
         // Setup
         RoomInventory inventory = new RoomInventory();
         BookingRequestQueue queue = new BookingRequestQueue();
+        BookingHistory history = new BookingHistory();
 
         // Requests
         queue.addRequest(new Reservation("Alice", "Single Room"));
         queue.addRequest(new Reservation("Bob", "Double Room"));
+        queue.addRequest(new Reservation("Charlie", "Single Room"));
 
         // Process bookings
-        BookingService bookingService = new BookingService();
-        List<String> reservationIds = bookingService.processBookings(queue, inventory);
+        BookingService service = new BookingService();
+        service.processBookings(queue, inventory, history);
 
-        // Add-On Services
-        AddOnServiceManager serviceManager = new AddOnServiceManager();
+        // Reporting
+        BookingReportService report = new BookingReportService();
 
-        // Add services to first reservation
-        if (!reservationIds.isEmpty()) {
-            String resId = reservationIds.get(0);
-
-            serviceManager.addService(resId, new AddOnService("Breakfast", 200));
-            serviceManager.addService(resId, new AddOnService("Airport Pickup", 500));
-
-            serviceManager.displayServices(resId);
-        }
+        report.displayAllBookings(history.getAllReservations());
+        report.generateSummary(history.getAllReservations());
 
         System.out.println("=================================");
     }
